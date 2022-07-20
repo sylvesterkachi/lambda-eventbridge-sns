@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless patterns - Lamdba put events to EventBridge filter/pipe to SNS Topics
+
+Resources:
+  BankBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: bluebank-bus
+
+  EventsGeneratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      MemorySize: 128
+      Policies:
+      - Statement:
+        - Sid: talk2eventbridge
+          Effect: Allow
+          Action:
+          - events:DeleteRule
+          - events:DescribeRule
+          - events:DisableRule
+          - events:EnableRule
+          - events:ListRuleNamesByTarget
+          - events:ListRules
+          - events:ListTargetsByRule
+          - events:PutEvents
+          Resource:
+            - !GetAtt BankBus.Arn
+  # Define the SNS topic or ATM transactions only
+  AtmBankTopic:
+    Type: AWS::SNS::Topic
+
+  # Define the SNS topic for bankbranch transactions only
+  BankBranchTopic:
+    Type: AWS::SNS::Topic
+
+# Define the SNS topic for bank transaction warehouse for all transactions
+  TransactionWarehouseTopic:
+    Type: AWS::SNS::Topic
+
+  # Define the event rule to filter for events to ATM Topic
+  EventRuleAtmBank:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "EventRule ATM Bank"
+      EventBusName: !Ref BankBus
+      EventPattern:
+        account:
+          - !Sub '${AWS::AccountId}'
+        source:
+          - "atm.bluebank.events"
+        detail-type:
+          - "BOP transaction"
+        detail:
+          bop_reportable:
+            - "Yes"
+      Targets:
+        - Arn: !Ref AtmBankTopic
+          Id: "AtmBankTopic"
+
+  # Define the event rule to filter for events to BankBranchTopic Topic
+  EventRuleAtmBank:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "EventRule Bank Branch"
+      EventBusName: !Ref BankBus
+      EventPattern:
+        account:
+          - !Sub '${AWS::AccountId}'
+        source:
+          - "bankbranch.bluebank.events"
+        detail-type:
+          - "BOP transaction"
+        detail:
+          bop_reportable:
+            - "Yes"
+      Targets:
+        - Arn: !Ref BankBranchTopic
+          Id: "BankBranchTopic"
+
+  # Define the event rule to filter for events to TransactionWarehouseTopic
+  EventRuleTransactionWarehouseTopic:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "EventRule TransactionWarehouse Topic"
+      EventBusName: !Ref BankBus
+      EventPattern:
+        account:
+          - !Sub '${AWS::AccountId}'
+        source:
+          - "bankbranch.bluebank.events"
+          - "atm.bluebank.events"
+        detail-type:
+          - "BOP transaction"
+        detail:
+          bop_reportable:
+            - "Yes"
+      Targets:
+        - Arn: !Ref TransactionWarehouseTopic
+          Id: "TransactionWarehouseTopic"
+
+  # Allow EventBridge to invoke ATM Bank Topic
+  EventBridgeToSnsPolicyAtmBank:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: [
+        "SNS:GetTopicAttributes",
+        "SNS:SetTopicAttributes",
+        "SNS:AddPermission",
+        "SNS:RemovePermission",
+        "SNS:DeleteTopic",
+        "SNS:Subscribe",
+        "SNS:ListSubscriptionsByTopic",
+        "SNS:Publish"
+      ]
+          Resource: !Ref AtmBankTopic
+      Topics:
+        - !Ref AtmBankTopic
+
+  # Allow EventBridge to invoke bankbranch Topic
+  EventBridgeToSnsPolicyAtmBank:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: [
+        "SNS:GetTopicAttributes",
+        "SNS:SetTopicAttributes",
+        "SNS:AddPermission",
+        "SNS:RemovePermission",
+        "SNS:DeleteTopic",
+        "SNS:Subscribe",
+        "SNS:ListSubscriptionsByTopic",
+        "SNS:Publish"
+      ]
+          Resource: !Ref BankBranchTopic
+      Topics:
+        - !Ref BankBranchTopic
+
+  # Allow EventBridge to invoke TransactionWarehouseTopic
+  EventBridgeToSnsPolicyTransactionWarehouseTopic:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: [
+        "SNS:GetTopicAttributes",
+        "SNS:SetTopicAttributes",
+        "SNS:AddPermission",
+        "SNS:RemovePermission",
+        "SNS:DeleteTopic",
+        "SNS:Subscribe",
+        "SNS:ListSubscriptionsByTopic",
+        "SNS:Publish"
+      ]
+          Resource: !Ref TransactionWarehouseTopic
+      Topics:
+        - !Ref TransactionWarehouseTopic
+
+Outputs:
+  AtmBankTopicName:
+    Description: SNS AtmBankTopic topic name
+    Value: !GetAtt AtmBankTopic.TopicName
+  BankBranchTopic:
+    Description: SNS Bank Branch Topic topic name
+    Value: !GetAtt BankBranchTopic.TopicName
+  TransactionWarehouseTopicName:
+    Description: TransactionWarehouseTopic topic name
+    Value: !GetAtt TransactionWarehouseTopic.TopicName
+  Lambdafunction:
+    Description: Main Lambda function
+    Value: !Ref EventsGeneratorFunction
+  EventBusBusName:
+    Description: Name of the main EventBus
+    Value: !Ref BankBus

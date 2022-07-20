@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless patterns - Lamdba put events to EventBridge filter/pipe to
+  SNS Topics
+Resources:
+  BankBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: bluebank-bus
+  EventsGeneratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: EventsGeneratorFunction
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      MemorySize: 128
+      Policies:
+      - Statement:
+        - Sid: talk2eventbridge
+          Effect: Allow
+          Action:
+          - events:DeleteRule
+          - events:DescribeRule
+          - events:DisableRule
+          - events:EnableRule
+          - events:ListRuleNamesByTarget
+          - events:ListRules
+          - events:ListTargetsByRule
+          - events:PutEvents
+          Resource:
+          - Fn::GetAtt:
+            - BankBus
+            - Arn
+    Metadata:
+      SamResourceId: EventsGeneratorFunction
+  AtmBankTopic:
+    Type: AWS::SNS::Topic
+  BankBranchTopic:
+    Type: AWS::SNS::Topic
+  TransactionWarehouseTopic:
+    Type: AWS::SNS::Topic
+  EventRuleAtmBank:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: EventRule Bank Branch
+      EventBusName:
+        Ref: BankBus
+      EventPattern:
+        account:
+        - Fn::Sub: ${AWS::AccountId}
+        source:
+        - bankbranch.bluebank.events
+        detail-type:
+        - BOP transaction
+        detail:
+          bop_reportable:
+          - 'Yes'
+      Targets:
+      - Arn:
+          Ref: BankBranchTopic
+        Id: BankBranchTopic
+  EventRuleTransactionWarehouseTopic:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: EventRule TransactionWarehouse Topic
+      EventBusName:
+        Ref: BankBus
+      EventPattern:
+        account:
+        - Fn::Sub: ${AWS::AccountId}
+        source:
+        - bankbranch.bluebank.events
+        - atm.bluebank.events
+        detail-type:
+        - BOP transaction
+        detail:
+          bop_reportable:
+          - 'Yes'
+      Targets:
+      - Arn:
+          Ref: TransactionWarehouseTopic
+        Id: TransactionWarehouseTopic
+  EventBridgeToSnsPolicyAtmBank:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action:
+          - SNS:GetTopicAttributes
+          - SNS:SetTopicAttributes
+          - SNS:AddPermission
+          - SNS:RemovePermission
+          - SNS:DeleteTopic
+          - SNS:Subscribe
+          - SNS:ListSubscriptionsByTopic
+          - SNS:Publish
+          Resource:
+            Ref: BankBranchTopic
+      Topics:
+      - Ref: BankBranchTopic
+  EventBridgeToSnsPolicyTransactionWarehouseTopic:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action:
+          - SNS:GetTopicAttributes
+          - SNS:SetTopicAttributes
+          - SNS:AddPermission
+          - SNS:RemovePermission
+          - SNS:DeleteTopic
+          - SNS:Subscribe
+          - SNS:ListSubscriptionsByTopic
+          - SNS:Publish
+          Resource:
+            Ref: TransactionWarehouseTopic
+      Topics:
+      - Ref: TransactionWarehouseTopic
+Outputs:
+  AtmBankTopicName:
+    Description: SNS AtmBankTopic topic name
+    Value:
+      Fn::GetAtt:
+      - AtmBankTopic
+      - TopicName
+  BankBranchTopic:
+    Description: SNS Bank Branch Topic topic name
+    Value:
+      Fn::GetAtt:
+      - BankBranchTopic
+      - TopicName
+  TransactionWarehouseTopicName:
+    Description: TransactionWarehouseTopic topic name
+    Value:
+      Fn::GetAtt:
+      - TransactionWarehouseTopic
+      - TopicName
+  Lambdafunction:
+    Description: Main Lambda function
+    Value:
+      Ref: EventsGeneratorFunction
+  EventBusBusName:
+    Description: Name of the main EventBus
+    Value:
+      Ref: BankBus
