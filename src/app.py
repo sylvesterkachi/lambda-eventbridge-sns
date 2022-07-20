@@ -14,12 +14,12 @@ def lambda_handler(event, context):
     Entries=[
         {       "Source": bank_source,
                 "Resources": [
-                "arn:aws:events:us-east-1:185131372497:event-bus/bluebank-bus",
+                "arn:aws:events:us-east-1:123456789012:event-bus/bluebank-bus",
             ],
                 "DetailType": "BOP transaction",
                 "Time": datetime.today().strftime('%Y-%m-%d'),
                 "Detail": "{ \"transaction_value\": \"10,800\", \"date\": \""+t_datetime+"\",  \"customer\": \"Joe Simon\", \"bop_reportable\": \"Yes\" }",
-            "EventBusName": "arn:aws:events:us-east-1:185131372497:event-bus/bluebank-bus",
+            "EventBusName": "arn:aws:events:us-east-1:123456789012:event-bus/bluebank-bus",
             "TraceHeader": "atmORbanklocation"
         },
     ],
